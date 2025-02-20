@@ -103,7 +103,6 @@ func queryGetHandler(w http.ResponseWriter, r *http.Request) {
 	}
     
 	response := LLMResponse{
-		ID:   0, 
 		Text: result,
 	}
 	w.Header().Set("Content-Type", "application/json")
