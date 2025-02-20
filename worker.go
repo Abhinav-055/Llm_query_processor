@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 )
@@ -23,6 +24,9 @@ func worker(workerID int, queries <-chan Query, apiKey string, wg *sync.WaitGrou
 		if err != nil {
 			result = fmt.Sprintf("Error: %v", err)
 		}
-		responsesMap.Store(query.ID, LLMResponse{ID: query.ID, Text: result})
+		response := LLMResponse{ID: query.ID, Text: result}
+		channelName := "query_result_" + fmt.Sprint(query.ID)
+		responseJSON, _ := json.Marshal(response)
+		rdb.Publish(ctx, channelName, string(responseJSON))
 	}
 }

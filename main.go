@@ -1,21 +1,23 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"sync"
 	"sync/atomic"
+	"github.com/go-redis/redis/v8"
 	"github.com/joho/godotenv"
 )
 
 var (
-	queries      chan Query      
-	responsesMap sync.Map         
-	idCounter    int32           
+	queries      chan Query        
+	idCounter    int32      
+	ctx=context.Background()
+	rdb *redis.Client     
 )
 
 func main() {
@@ -27,7 +29,12 @@ func main() {
 	if apiKey == "" {
 		log.Fatal("OPENAI_API_KEY is not set. Please set it in your .env file or environment.")
 	}
-
+    
+	rdb=redis.NewClient(&redis.Options{Addr:"localhost:6379",})
+	_,err:=rdb.Ping(ctx).Result()
+	if err != nil {
+		log.Fatalf("Could not connect to Redis: %v", err)
+	}
 	queries = make(chan Query, 10)
 
 	var wg sync.WaitGroup
@@ -58,7 +65,7 @@ func queryPostHandler(w http.ResponseWriter, r *http.Request) {
 	newID := int(atomic.AddInt32(&idCounter, 1))
 	req.ID = newID
 
-	responsesMap.Store(newID, LLMResponse{ID: newID, Text: "Processing..."})
+	
 	queries <- req
 
 	resp := map[string]interface{}{
@@ -80,36 +87,26 @@ func queryGetHandler(w http.ResponseWriter, r *http.Request) {
         http.Error(w, "Missing id parameter", http.StatusBadRequest)
         return
     }
-
-    id, err := strconv.Atoi(idStr)
-    if err != nil {
-        http.Error(w, "Invalid id parameter", http.StatusBadRequest)
-        return
-    }
-
-    value, ok := responsesMap.Load(id)
-    if !ok {
-        log.Printf("No query found with id %d", id)
-        http.Error(w, "No query found with that id", http.StatusNotFound)
-        return
-    }
     
-    log.Printf("Retrieved response for id %d: %+v", id, value)
-
-    response, ok := value.(LLMResponse)
-    if !ok {
-        log.Printf("Type assertion failed for id %d: got %T", id, value)
-        http.Error(w, "Error processing response: unexpected data format", http.StatusInternalServerError)
-        return
-    }
-
-    if response.Text == "Processing..." {
-        log.Printf("Query id %d is still processing", id)
-    }
-
-    w.Header().Set("Content-Type", "application/json")
-    if err := json.NewEncoder(w).Encode(response); err != nil {
-        log.Printf("Error encoding JSON response for id %d: %v", id, err)
-    }
+	channelName:="query_result_"+idStr
+	sub := rdb.Subscribe(ctx, channelName)
+	defer sub.Close()
+    
+	ch := sub.Channel()
+	var result string
+	select {
+	case msg := <-ch:
+		result = msg.Payload
+	case <-r.Context().Done():
+		http.Error(w, "Timeout waiting for result", http.StatusRequestTimeout)
+		return
+	}
+    
+	response := LLMResponse{
+		ID:   0, 
+		Text: result,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
