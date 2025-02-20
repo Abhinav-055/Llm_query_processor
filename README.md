@@ -5,7 +5,7 @@ Create a file named as .env in the project directory.
 Add your OpenAI api key 
 OPENAI_API_KEY="Your-api-key"
 
-Migrate to main directory
+Migrate to main directory/n
 cd Llm_query_processor
 Run the code
 go run .
