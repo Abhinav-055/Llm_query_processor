@@ -15,8 +15,8 @@ type OpenAIMessage struct {
 }
 
 type OpenAIRequest struct {
-	Model  string          `json:"model"`
-	Store  bool            `json:"store"`
+	Model    string          `json:"model"`
+	Store    bool            `json:"store"`
 	Messages []OpenAIMessage `json:"messages"`
 }
 
@@ -31,8 +31,8 @@ func callOpenAI(prompt string, apiKey string) (string, error) {
 	url := "https://api.openai.com/v1/chat/completions"
 
 	requestPayload := OpenAIRequest{
-		Model:  "gpt-4o-mini",
-		Store:  true,
+		Model: "gpt-4o-mini",
+		Store: true,
 		Messages: []OpenAIMessage{
 			{Role: "user", Content: prompt},
 		},
@@ -51,10 +51,12 @@ func callOpenAI(prompt string, apiKey string) (string, error) {
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
 	client := &http.Client{Timeout: 10 * time.Second}
+	start := time.Now()
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
+	fmt.Printf("callOpenAI: Request took %v\n", time.Since(start))
 	defer resp.Body.Close()
 
 	respBody, err := ioutil.ReadAll(resp.Body)
